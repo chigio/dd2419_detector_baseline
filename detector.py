@@ -72,7 +72,7 @@ class Detector(nn.Module):
         """
         bbs = []
         # decode bounding boxes for each image
-        for o in out:
+        for o in out:           #there will be N o in out
             img_bbs = []
 
             # find cells with bounding box center
@@ -80,11 +80,11 @@ class Detector(nn.Module):
 
             # loop over all cells with bounding box center
             for bb_index in bb_indices:
-                bb_coeffs = o[0:4, bb_index[0], bb_index[1]]
+                bb_coeffs = o[0:4, bb_index[0], bb_index[1]] # [0:4]channels, bb_height, bb_width
 
                 # decode bounding box size and position
-                width = self.img_width * bb_coeffs[2]
-                height = self.img_height * bb_coeffs[3]
+                width = self.img_width * bb_coeffs[2] # img_width * bb_width
+                height = self.img_height * bb_coeffs[3] #img_height * bb_height
                 y = (
                     self.img_height / self.out_cells_y * (bb_index[0] + bb_coeffs[1])
                     - height / 2.0
