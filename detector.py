@@ -4,10 +4,11 @@ Inspired by
 You only look once: Unified, real-time object detection, Redmon, 2016.
 """
 import torch
+# from torch._C import torch.long
 import torch.nn as nn
 from torchvision import models
 from torchvision import transforms
-
+import numpy as np
 
 class Detector(nn.Module):
     """Baseline module for object detection."""
@@ -23,7 +24,7 @@ class Detector(nn.Module):
         # output of mobilenet_v2 will be 1280x15x20 for 480x640 input images
 
         self.head = nn.Conv2d(
-            in_channels=1280, out_channels=5, kernel_size=1
+            in_channels=1280, out_channels=15+5, kernel_size=1
         )
         # 1x1 Convolution to reduce channels to out_channels without changing H and W
 
@@ -43,7 +44,8 @@ class Detector(nn.Module):
         Compute output of neural network from input.
         """
         features = self.features(inp)
-        out = self.head(features)  # Linear (i.e., no) activation
+        out = self.head(features) #Linear (i.e., no) activation
+        # out[:,5:,:,:] = nn.functional.softmax(out[:,5:,:,:]) #softmax for classes
 
         return out
 
@@ -72,7 +74,7 @@ class Detector(nn.Module):
         """
         bbs = []
         # decode bounding boxes for each image
-        for o in out:           #there will be N o in out
+        for o in out:
             img_bbs = []
 
             # find cells with bounding box center
@@ -80,11 +82,11 @@ class Detector(nn.Module):
 
             # loop over all cells with bounding box center
             for bb_index in bb_indices:
-                bb_coeffs = o[0:4, bb_index[0], bb_index[1]] # [0:4]channels, bb_height, bb_width
+                bb_coeffs = o[0:4, bb_index[0], bb_index[1]]
 
                 # decode bounding box size and position
-                width = self.img_width * bb_coeffs[2] # img_width * bb_width
-                height = self.img_height * bb_coeffs[3] #img_height * bb_height
+                width = self.img_width * bb_coeffs[2]
+                height = self.img_height * bb_coeffs[3]
                 y = (
                     self.img_height / self.out_cells_y * (bb_index[0] + bb_coeffs[1])
                     - height / 2.0
@@ -93,6 +95,7 @@ class Detector(nn.Module):
                     self.img_width / self.out_cells_x * (bb_index[1] + bb_coeffs[0])
                     - width / 2.0
                 )
+                cat=np.argmax(o[5:,bb_index[0], bb_index[1]])
 
                 img_bbs.append(
                     {
@@ -100,6 +103,7 @@ class Detector(nn.Module):
                         "height": height,
                         "x": x,
                         "y": y,
+                        "category" : cat
                     }
                 )
             bbs.append(img_bbs)
@@ -124,7 +128,7 @@ class Detector(nn.Module):
         """
         # Convert PIL.Image to torch.Tensor
         image = transforms.ToTensor()(image)
-
+        tot_classes=15
         # Convert bounding boxes to target format
 
         # First two channels contain relativ x and y offset of bounding box center
@@ -133,13 +137,14 @@ class Detector(nn.Module):
 
         # If there is no bb, the first 4 channels will not influence the loss
         # -> can be any number (will be kept at 0 zero)
-        target = torch.zeros(5, 15, 20)
+        target = torch.zeros(5+1, 15, 20)
         for ann in anns:
             x = ann["bbox"][0]
             y = ann["bbox"][1]
             width = ann["bbox"][2]
             height = ann["bbox"][3]
-
+            class_n=ann["category_id"]
+            
             x_center = x + width / 2.0
             y_center = y + height / 2.0
             x_center_rel = x_center / self.img_width * self.out_cells_x
@@ -159,5 +164,6 @@ class Detector(nn.Module):
             target[1, y_ind, x_ind] = y_cell_pos
             target[2, y_ind, x_ind] = rel_width
             target[3, y_ind, x_ind] = rel_height
-
+            target[5,y_ind, x_ind] = class_n
+            
         return image, target

@@ -4,7 +4,7 @@ from __future__ import print_function
 import argparse
 from datetime import datetime
 import os
-
+import numpy as np
 import torch
 from torch import nn
 from torchvision.datasets import CocoDetection
@@ -37,9 +37,10 @@ def train(device="cpu"):
         annFile="./dd2419_coco/annotations/training.json",
         transforms=detector.input_transform,
     )
+    
 
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=8, shuffle=True)
-
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=6, shuffle=True)
+    
     # training params
     max_iterations = wandb.config.max_iterations = 10000
     learning_rate = wandb.config.learning_rate = 1e-4
@@ -100,7 +101,13 @@ def train(device="cpu"):
                 out[neg_indices[0], 4, neg_indices[1], neg_indices[2]],
                 target_batch[neg_indices[0], 4, neg_indices[1], neg_indices[2]],
             )
-            loss = pos_mse + weight_reg * reg_mse + weight_noobj * neg_mse
+
+            
+            class_loss = nn.functional.cross_entropy(
+                out[pos_indices[0], 5:, pos_indices[1], pos_indices[2]],
+                target_batch[pos_indices[0], 5, pos_indices[1], pos_indices[2]].to( dtype=torch.int64)
+            )
+            loss = class_loss + pos_mse + weight_reg * reg_mse + weight_noobj * neg_mse
 
             # optimize
             optimizer.zero_grad()
@@ -113,6 +120,7 @@ def train(device="cpu"):
                     "loss pos": pos_mse.item(),
                     "loss neg": neg_mse.item(),
                     "loss reg": reg_mse.item(),
+                    "loss cat": class_loss.item(),
                 },
                 step=current_iteration,
             )
@@ -137,9 +145,11 @@ def train(device="cpu"):
                             extent=(0, 640, 480, 0),
                             alpha=0.7,
                         )
+                        cat_dict={0: "no bicycle", 1: "airport", 2: "dangerous left", 3: "dangerous right", 4: "follow left",
+ 5: "follow right", 6: "junction", 7: "no heavy truck", 8: "no parking", 9: "no stopping and parking",
+ 10: "residential", 11: "narrows from left", 12: "narrows from right", 13: "roundabout",14: "stop"}
 
-                        # add bounding boxes
-                        utils.add_bounding_boxes(ax, bbs[i])
+                        utils.add_bounding_boxes(ax, bbs[i],cat_dict)
 
                         wandb.log(
                             {"test_img_{i}".format(i=i): figure}, step=current_iteration
