@@ -2,6 +2,7 @@
 import torch
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
+from torch._C import dtype
 
 
 def add_bounding_boxes(ax, bbs, category_dict=None):
@@ -33,7 +34,7 @@ def add_bounding_boxes(ax, bbs, category_dict=None):
             plt.text(
                 bb["x"],
                 bb["y"],
-                category_dict[bb["category"]]["name"],
+                category_dict[bb["category"].item()],
             )
 
 
